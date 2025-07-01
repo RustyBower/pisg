@@ -30,6 +30,28 @@ sub normalline
         $hash{nick}   = $2;
         $hash{saying} = $3;
 
+        # BEGIN: BRIDGE NICK HANDLING
+        my @bridge_nicks = split /\s*,\s*/, ($self->{cfg}->{bridgenicks} // '');
+
+        if (grep { $_ eq $hash{nick} } @bridge_nicks) {
+            # Match bridged messages: <@nick> or <nick>
+            if ($hash{saying} =~ /^(?:\d*)?<@?([^>]+)> (.+)$/) {
+                my ($real_nick, $real_msg) = ($1, $2);
+
+                # Clean nick
+                $real_nick =~ s/\p{Cf}//g;
+                $real_nick =~ s/\s+/_/g;
+                $real_nick =~ s/[^a-zA-Z0-9_\-\[\]\\\^\{\}`|]+//g;
+
+                $hash{nick}   = $real_nick;
+                $hash{saying} = $real_msg;
+
+            } else {
+                return;  # Drop this line
+            }
+        }
+        # END: BRIDGE NICK HANDLING
+
         return \%hash;
     } else {
         return;

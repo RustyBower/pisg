@@ -213,6 +213,7 @@ sub get_default_config_settings
         regexpaliases => 0,
 
         botnicks => '',            # Needed for DCpp format (non-irc)
+        bridgenicks => '',
 
         statsdump => '',           # Debug option
         modules_dir => '',         # set in get_cmdline_options

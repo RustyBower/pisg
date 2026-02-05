@@ -1,7 +1,8 @@
 package Pisg::Parser::Format::irccloud;
 
-# IRCCloud log format parser for pisg
-# Handles IRCCloud's export format with Unicode arrows for events
+# Hybrid IRC log format parser for pisg
+# Handles both IRCCloud export format (Unicode arrows) and ZNC/energymech format (*** prefix)
+# This allows mixing historical IRCCloud logs with live ZNC logs
 
 use strict;
 $^W = 1;
@@ -170,6 +171,66 @@ sub thirdline
             $hash{nick} = $1;
             $hash{newmode} = $2;
             $hash{modechanges} = $3;
+            return \%hash;
+        }
+
+        #
+        # ZNC/energymech format support (*** prefix style)
+        # This allows mixing ZNC live logs with IRCCloud historical logs
+        #
+
+        # ZNC Join: *** Joins: nick (host)
+        if ($rest =~ /^\*\*\* Joins: (\S+)/) {
+            $hash{nick} = $1;
+            $hash{newjoin} = $1;
+            add_valid_nick($1);
+            return \%hash;
+        }
+
+        # ZNC Quit: *** Quits: nick (reason)
+        if ($rest =~ /^\*\*\* Quits: (\S+)/) {
+            $hash{nick} = $1;
+            return \%hash;
+        }
+
+        # ZNC Part: *** Parts: nick (reason)
+        if ($rest =~ /^\*\*\* Parts: (\S+)/) {
+            $hash{nick} = $1;
+            return \%hash;
+        }
+
+        # ZNC Nick change: *** nick is now known as newnick
+        if ($rest =~ /^\*\*\* (\S+) is now known as (\S+)/) {
+            $hash{nick} = $1;
+            $hash{newnick} = $2;
+            add_valid_nick($1);
+            add_valid_nick($2);
+            return \%hash;
+        }
+
+        # ZNC Kick: *** nick was kicked by kicker (reason)
+        if ($rest =~ /^\*\*\* (\S+) was kicked by (\S+)\s*(.*)$/) {
+            $hash{nick} = $1;
+            $hash{kicker} = $2;
+            my $reason = $3 || '';
+            $reason =~ s/^\(//;
+            $reason =~ s/\)$//;
+            $hash{kicktext} = $reason;
+            return \%hash;
+        }
+
+        # ZNC Topic: *** nick changes topic to 'new topic'
+        if ($rest =~ /^\*\*\* (\S+) changes topic to '?(.*?)'?$/) {
+            $hash{nick} = $1;
+            $hash{newtopic} = $2;
+            return \%hash;
+        }
+
+        # ZNC Mode: *** nick sets mode: +o target
+        if ($rest =~ /^\*\*\* (\S+) sets mode: ([+-]\S+)\s*(.*)$/) {
+            $hash{nick} = $1;
+            $hash{newmode} = $2;
+            $hash{modechanges} = $3 if $3;
             return \%hash;
         }
 

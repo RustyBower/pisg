@@ -31,23 +31,34 @@ sub normalline
         $hash{saying} = $3;
 
         # BEGIN: BRIDGE NICK HANDLING
-        my @bridge_nicks = split /\s*,\s*/, ($self->{cfg}->{bridgenicks} // '');
+        my @bridge_nicks = split /\s+/, ($self->{cfg}->{bridgenicks} // '');
 
-        if (grep { $_ eq $hash{nick} } @bridge_nicks) {
+        # Use prefix matching for bridge nicks (e.g., "discordsync" matches "discordsync``")
+        if (@bridge_nicks && grep { $hash{nick} =~ /^\Q$_\E/ } @bridge_nicks) {
+            # Strip IRC formatting codes from the message first
+            my $clean_saying = $hash{saying};
+            $clean_saying =~ s/\x03\d{0,2}(?:,\d{1,2})?//g;  # IRC color codes
+            $clean_saying =~ s/[\x02\x0f\x16\x1d\x1f]//g;     # bold, reset, reverse, italic, underline
+
             # Match bridged messages: <@nick> or <nick>
-            if ($hash{saying} =~ /^(?:\d*)?<@?([^>]+)> (.+)$/) {
+            if ($clean_saying =~ /^<@?([^>]+)>\s*(.*)$/) {
                 my ($real_nick, $real_msg) = ($1, $2);
 
-                # Clean nick
-                $real_nick =~ s/\p{Cf}//g;
-                $real_nick =~ s/\s+/_/g;
-                $real_nick =~ s/[^a-zA-Z0-9_\-\[\]\\\^\{\}`|]+//g;
+                # Clean nick: remove unicode format chars, normalize whitespace, keep valid IRC chars
+                $real_nick =~ s/\p{Cf}//g;                              # Zero-width chars
+                $real_nick =~ s/^\s+|\s+$//g;                           # Trim whitespace
+                $real_nick =~ s/\s+/_/g;                                # Internal spaces to underscore
+                $real_nick =~ s/[^a-zA-Z0-9_\-\[\]\\\^\{\}`|]//g;       # Keep only valid IRC nick chars
 
-                $hash{nick}   = $real_nick;
-                $hash{saying} = $real_msg;
-
+                # Only use if we got a valid nick
+                if ($real_nick && length($real_nick) > 0) {
+                    $hash{nick}   = $real_nick;
+                    $hash{saying} = $real_msg;
+                } else {
+                    return;  # Invalid nick extracted
+                }
             } else {
-                return;  # Drop this line
+                return;  # Drop this line - doesn't match bridge format
             }
         }
         # END: BRIDGE NICK HANDLING

@@ -1847,7 +1847,7 @@ sub _mostreferencednicks
 
     foreach my $word (sort keys %{ $self->{stats}->{wordcounts} }) {
         next if is_ignored($word);
-        my $nick = is_nick($word) or next;
+        my $nick = is_valid_nick_for_reference($word) or next;
         next if !exists $self->{stats}->{lines}{$nick};
         $usages{$word} = $self->{stats}->{wordcounts}{$word};
     }

@@ -26,13 +26,18 @@ Pisg::Common - some common functions of pisg.
 
 use Exporter;
 @ISA = ('Exporter');
-@EXPORT = qw(add_alias add_aliaswild add_ignore add_url_ignore is_ignored url_is_ignored find_alias store_aliases restore_aliases match_urls match_email htmlentities urlencode is_nick randomglob wordlist_regexp);
+@EXPORT = qw(add_alias add_aliaswild add_ignore add_url_ignore is_ignored url_is_ignored find_alias store_aliases restore_aliases match_urls match_email htmlentities urlencode is_nick is_valid_nick_for_reference add_valid_nick randomglob wordlist_regexp);
 
 use strict;
 $^W = 1;
 
 my (%aliases, %aliaswilds, %ignored, %aliasseen, %ignored_urls, %url_seen);
 my (%aliases2, %aliaswilds2, %ignored2, %aliasseen2, %ignored_urls2, %url_seen2);
+
+# Valid nicks - populated from joins, nick changes, and speakers
+# Used for accurate "most referenced nicks" tracking
+my %valid_nicks;
+my %valid_nicks2;
 
 # add_alias assumes that the first argument is the true nick and the second is
 # the alias, but will accomidate other arrangements if necessary.
@@ -123,6 +128,29 @@ sub is_nick
     return 0;
 }
 
+# Add a nick to the valid nicks set (called from parser for joins/nick changes/speakers)
+sub add_valid_nick
+{
+    my ($nick) = @_;
+    return unless $nick;
+    my $lcnick = lc($nick);
+    $valid_nicks{$lcnick} = $nick unless exists $valid_nicks{$lcnick};
+}
+
+# Check if a word is a valid nick for reference counting purposes
+# More strict than is_nick() - requires the nick to be in valid_nicks set
+sub is_valid_nick_for_reference
+{
+    my ($word) = @_;
+    my $lcword = lc($word);
+
+    # Must be in our valid nicks set
+    return 0 unless exists $valid_nicks{$lcword};
+
+    # Then use normal is_nick to get the canonical form
+    return is_nick($word);
+}
+
 # For efficiency reasons, find_alias() caches aliases when it finds them,
 # because the regexp search through %aliaswilds is *really* expensive.
 # %aliasseen is used to mark nicks for which nothing matches--we can't add
@@ -157,6 +185,7 @@ sub store_aliases
     %aliasseen2 = %aliasseen;
     %ignored_urls2 = %ignored_urls;
     %url_seen2 = %url_seen;
+    %valid_nicks2 = %valid_nicks;
 }
 
 sub restore_aliases
@@ -167,6 +196,7 @@ sub restore_aliases
     %aliasseen = %aliasseen2;
     %ignored_urls = %ignored_urls2;
     %url_seen = %url_seen2;
+    %valid_nicks = %valid_nicks2;
 }
 
 sub match_urls
@@ -197,16 +227,16 @@ sub htmlentities
     $str =~ s/\</\&lt;/go;
     $str =~ s/\>/\&gt;/go;
     if ($charset and $charset =~ /iso-8859-1/i) { # this is for people without Text::Iconv
-        $str =~ s/ü/&uuml;/go;
-        $str =~ s/ö/&ouml;/go;
-        $str =~ s/ä/&auml;/go;
-        $str =~ s/ß/&szlig;/go;
-        $str =~ s/å/&aring;/go;
-        $str =~ s/æ/&aelig;/go;
-        $str =~ s/ø/&oslash;/go;
-        $str =~ s/Å/&Aring;/go;
-        $str =~ s/Æ/&AElig;/go;
-        $str =~ s/Ø/&Oslash;/go;
+        $str =~ s/ï¿½/&uuml;/go;
+        $str =~ s/ï¿½/&ouml;/go;
+        $str =~ s/ï¿½/&auml;/go;
+        $str =~ s/ï¿½/&szlig;/go;
+        $str =~ s/ï¿½/&aring;/go;
+        $str =~ s/ï¿½/&aelig;/go;
+        $str =~ s/ï¿½/&oslash;/go;
+        $str =~ s/ï¿½/&Aring;/go;
+        $str =~ s/ï¿½/&AElig;/go;
+        $str =~ s/ï¿½/&Oslash;/go;
         $str =~ s/\x95/\&bull;/go;
     }
     return $str;

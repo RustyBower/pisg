@@ -79,6 +79,7 @@ sub actionline
     my ($self, $line, $lines) = @_;
     my %hash;
 
+    # Try standard "* nick action" format first
     if ($line =~ /$self->{actionline}/o) {
 
         $hash{hour}   = $1;
@@ -100,9 +101,23 @@ sub actionline
         return if $hash{nick} eq 'Joined' && $hash{saying} =~ /^channel/;
 
         return \%hash;
-    } else {
-        return;
     }
+
+    # IRCCloud exports /me actions with em-dash: "— nick action"
+    # em-dash U+2014 = UTF-8 bytes \xe2\x80\x94 (file is read as raw bytes)
+    if ($line =~ /^\[[^\]]*(\d{2}):\d+:\d+\] \xe2\x80\x94 (\S+) (.*)$/o) {
+
+        $hash{hour}   = $1;
+        $hash{nick}   = $2;
+        $hash{saying} = $3;
+
+        # Skip nick changes - handled in thirdline
+        return if $hash{saying} =~ /^is now known as /;
+
+        return \%hash;
+    }
+
+    return;
 }
 
 sub thirdline

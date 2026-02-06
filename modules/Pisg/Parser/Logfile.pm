@@ -151,6 +151,7 @@ sub analyze
             # take care of false nicks/words, this only happens with cache
             foreach (keys %{$s->{lastvisited}}) {
                 find_alias($_);
+                add_valid_nick($_);
             }
         } else {
             $self->_parse_file($s, $l, $logfile);

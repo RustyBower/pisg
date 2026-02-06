@@ -66,6 +66,12 @@ sub create_output
         $self->{cfg}->{bignumbersthreshold} = int(sqrt($self->{stats}->{topactive_lines}));
     }
 
+    # Modern theme: generate Chart.js-based output and return early
+    if ($self->{cfg}->{moderntheme}) {
+        $self->_modern_output();
+        return;
+    }
+
     my $fname = $self->{cfg}->{outputfile};
     $fname =~ s/\%t/$self->{cfg}->{outputtag}/g;
     $fname =~ s/\%l/$self->{cfg}->{lang}/g;
@@ -2488,6 +2494,423 @@ sub _activegenders {
     }
 
     _html("</tr></table>");
+}
+
+sub _modern_output
+{
+    my $self = shift;
+
+    my $fname = $self->{cfg}->{outputfile};
+    $fname =~ s/\%t/$self->{cfg}->{outputtag}/g;
+    $fname =~ s/\%l/$self->{cfg}->{lang}/g;
+    print "Now generating modern HTML ($self->{cfg}->{lang}) in $fname...\n"
+        unless ($self->{cfg}->{silent});
+
+    # Read the modern template
+    my $template_file = $self->{cfg}->{cssdir} . "modern-template.html";
+    my $template;
+    if (open(my $fh, '<', $template_file)) {
+        local $/;
+        $template = <$fh>;
+        close $fh;
+    } elsif (open(my $fh2, '<', $self->{cfg}->{search_path} . "/$template_file")) {
+        local $/;
+        $template = <$fh2>;
+        close $fh2;
+    } else {
+        die "$0: Unable to open modern template ($template_file): $!\n";
+    }
+
+    # Build the JSON data
+    my $json = $self->_emit_channel_json();
+
+    # Replace placeholder
+    $template =~ s/__CHANNEL_DATA__/$json/;
+
+    # Write output
+    open(my $out, '>', $fname) or die "$0: Unable to open outputfile($fname): $!\n";
+    print $out $template;
+    close $out;
+}
+
+sub _emit_channel_json
+{
+    my $self = shift;
+
+    my $stats = $self->{stats};
+    my $cfg = $self->{cfg};
+
+    # --- Meta ---
+    my $total_nicks = scalar keys %{ $stats->{lines} };
+    my $total_lines = $stats->{parsedlines} || 0;
+    my $days = $stats->{days} || 1;
+
+    my $h = $stats->{processtime}{hours} || 0;
+    my $m = $stats->{processtime}{mins} || 0;
+    my $s = $stats->{processtime}{secs} || 0;
+    my $process_time = "${h}h ${m}m ${s}s";
+
+    my $gen_time = $self->get_time();
+
+    # --- Hourly data ---
+    my @hourly;
+    for my $hour (0 .. 23) {
+        my $key = sprintf("%02d", $hour);
+        push @hourly, ($stats->{times}{$key} || 0);
+    }
+
+    # --- Active nicks ---
+    my @active;
+    if ($cfg->{sortbywords}) {
+        @active = sort { $stats->{words}{$b} <=> $stats->{words}{$a} } keys %{ $stats->{words} };
+    } else {
+        @active = sort { $stats->{lines}{$b} <=> $stats->{lines}{$a} } keys %{ $stats->{lines} };
+    }
+
+    my $nicks_count = scalar @active;
+    my $show_active = $cfg->{activenicks};
+    $show_active = $nicks_count if $show_active > $nicks_count;
+
+    my @nicks_json;
+    for (my $i = 0; $i < $show_active; $i++) {
+        my $nick = $active[$i];
+        my @periods;
+        for my $p (0 .. 3) {
+            push @periods, ($stats->{line_times}{$nick}[$p] || 0);
+        }
+        my $lines = $stats->{lines}{$nick} || 0;
+
+        my $lastseen_days = $stats->{days} - ($stats->{lastvisited}{$nick} || 0);
+        my $lastseen;
+        if ($lastseen_days == 0) {
+            $lastseen = "today";
+        } elsif ($lastseen_days == 1) {
+            $lastseen = "yesterday";
+        } else {
+            $lastseen = "$lastseen_days days ago";
+        }
+
+        my $quote = $stats->{sayings}{$nick} || $stats->{actionlines}{$nick} || "";
+        $quote = $self->_format_line($quote) if $quote;
+
+        push @nicks_json, {
+            name => $nick,
+            lines => $lines,
+            periods => \@periods,
+            lastSeen => $lastseen,
+            quote => $quote,
+        };
+    }
+
+    # --- Almost made it ---
+    my $almost_start = $cfg->{activenicks};
+    my $almost_end = $cfg->{activenicks} + $cfg->{activenicks2};
+    $almost_end = $nicks_count if $almost_end > $nicks_count;
+    my @almost;
+    for (my $i = $almost_start; $i < $almost_end; $i++) {
+        my $nick = $active[$i];
+        push @almost, { name => $nick, lines => ($stats->{lines}{$nick} || 0) };
+    }
+    my $other_nicks = $nicks_count - $almost_end;
+    $other_nicks = 0 if $other_nicks < 0;
+
+    # --- Big numbers (personality stats) ---
+    my $threshold = $cfg->{bignumbersthreshold};
+
+    # Questions
+    my %qpct;
+    foreach my $nick (keys %{ $stats->{questions} }) {
+        next unless $stats->{lines}{$nick} && $stats->{lines}{$nick} > $threshold;
+        $qpct{$nick} = sprintf("%.1f", ($stats->{questions}{$nick} / $stats->{lines}{$nick}) * 100);
+    }
+    my @q_sorted = sort { $qpct{$b} <=> $qpct{$a} } keys %qpct;
+
+    # Yelling (shouts)
+    my %spct;
+    foreach my $nick (keys %{ $stats->{shouts} }) {
+        next unless $stats->{lines}{$nick} && $stats->{lines}{$nick} > $threshold;
+        $spct{$nick} = sprintf("%.1f", ($stats->{shouts}{$nick} / $stats->{lines}{$nick}) * 100);
+    }
+    my @s_sorted = sort { $spct{$b} <=> $spct{$a} } keys %spct;
+
+    # CAPS
+    my %cpct;
+    foreach my $nick (keys %{ $stats->{allcaps} }) {
+        next unless $stats->{lines}{$nick} && $stats->{lines}{$nick} > $threshold;
+        $cpct{$nick} = sprintf("%.1f", ($stats->{allcaps}{$nick} / $stats->{lines}{$nick}) * 100);
+    }
+    my @c_sorted = sort { $cpct{$b} <=> $cpct{$a} } keys %cpct;
+
+    # Smileys
+    my %smpct;
+    foreach my $nick (keys %{ $stats->{smiles} }) {
+        next unless $stats->{lines}{$nick} && $stats->{lines}{$nick} > $threshold;
+        $smpct{$nick} = sprintf("%.1f", ($stats->{smiles}{$nick} / $stats->{lines}{$nick}) * 100);
+    }
+    my @sm_sorted = sort { $smpct{$b} <=> $smpct{$a} } keys %smpct;
+
+    # Sad faces
+    my %sdpct;
+    foreach my $nick (keys %{ $stats->{frowns} }) {
+        next unless $stats->{lines}{$nick} && $stats->{lines}{$nick} > $threshold;
+        $sdpct{$nick} = sprintf("%.1f", ($stats->{frowns}{$nick} / $stats->{lines}{$nick}) * 100);
+    }
+    my @sd_sorted = sort { $sdpct{$b} <=> $sdpct{$a} } keys %sdpct;
+
+    # Violence
+    my @aggressors = sort { ($stats->{violence}{$b} || 0) <=> ($stats->{violence}{$a} || 0) } keys %{ $stats->{violence} || {} };
+    my $violent_text = "Nobody beat anyone up. Everybody was friendly.";
+    if (@aggressors && $stats->{violence}{$aggressors[0]}) {
+        $violent_text = "$aggressors[0] attacked others $stats->{violence}{$aggressors[0]} times.";
+    }
+
+    # Line lengths
+    my %avglen;
+    foreach my $nick (keys %{ $stats->{lengths} }) {
+        next unless $stats->{lines}{$nick} && $stats->{lines}{$nick} > $threshold;
+        $avglen{$nick} = sprintf("%.1f", $stats->{lengths}{$nick} / $stats->{lines}{$nick});
+    }
+    my @len_sorted = sort { $avglen{$b} <=> $avglen{$a} } keys %avglen;
+
+    my $total_len = 0;
+    my $total_len_lines = 0;
+    foreach my $nick (keys %{ $stats->{lengths} }) {
+        $total_len += $stats->{lengths}{$nick};
+        $total_len_lines += $stats->{lines}{$nick};
+    }
+    my $channel_avg_len = $total_len_lines > 0 ? sprintf("%.1f", $total_len / $total_len_lines) : 0;
+
+    # Total words
+    my @words_sorted = sort { ($stats->{words}{$b} || 0) <=> ($stats->{words}{$a} || 0) } keys %{ $stats->{words} || {} };
+
+    # Words per line
+    my %wpl;
+    foreach my $nick (keys %{ $stats->{words} }) {
+        next unless $stats->{lines}{$nick} && $stats->{lines}{$nick} > $threshold;
+        $wpl{$nick} = sprintf("%.2f", $stats->{words}{$nick} / $stats->{lines}{$nick});
+    }
+    my @wpl_sorted = sort { $wpl{$b} <=> $wpl{$a} } keys %wpl;
+
+    my $total_words_all = 0;
+    foreach my $nick (keys %{ $stats->{words} }) {
+        $total_words_all += $stats->{words}{$nick};
+    }
+    my $channel_avg_wpl = $total_lines > 0 ? sprintf("%.2f", $total_words_all / $total_lines) : 0;
+
+    # --- Most used words ---
+    my @top_words;
+    my @word_keys = sort { $stats->{wordcounts}{$b} <=> $stats->{wordcounts}{$a} } keys %{ $stats->{wordcounts} || {} };
+    my $word_count = 0;
+    for my $word (@word_keys) {
+        last if $word_count >= ($cfg->{wordhistory} || 10);
+        next if length($word) < ($cfg->{wordlength} || 5);
+        next if is_ignored($word);
+        next if is_nick($word, $cfg->{cachedir});
+        push @top_words, {
+            word => lc($word),
+            count => $stats->{wordcounts}{$word},
+            lastUsedBy => ($stats->{wordnicks}{$word} || ""),
+        };
+        $word_count++;
+    }
+
+    # --- Most referenced nicks ---
+    my @ref_nicks;
+    my @ref_keys = sort { $stats->{wordcounts}{$b} <=> $stats->{wordcounts}{$a} } keys %{ $stats->{wordcounts} || {} };
+    my $ref_count = 0;
+    my $ref_checked = 0;
+    for my $word (@ref_keys) {
+        last if $ref_count >= ($cfg->{nickhistory} || 5);
+        last if $ref_checked > 500;
+        $ref_checked++;
+        next if is_ignored($word);
+        my $nick = is_valid_nick_for_reference($word) or next;
+        next if !exists $stats->{lines}{$nick};
+        # Skip nicks with very few lines - likely not real participants
+        next if ($stats->{lines}{$nick} || 0) < $threshold;
+        push @ref_nicks, {
+            nick => is_nick($word) || $word,
+            count => $stats->{wordcounts}{$word},
+            lastUsedBy => ($stats->{wordnicks}{$word} || ""),
+        };
+        $ref_count++;
+    }
+
+    # --- URLs ---
+    my @urls;
+    my @url_keys = sort { $stats->{urlcounts}{$b} <=> $stats->{urlcounts}{$a} } keys %{ $stats->{urlcounts} || {} };
+    my $url_count = 0;
+    for my $url (@url_keys) {
+        last if $url_count >= ($cfg->{urlhistory} || 5);
+        push @urls, {
+            url => $url,
+            count => $stats->{urlcounts}{$url},
+            lastUsedBy => ($stats->{urlnicks}{$url} || ""),
+        };
+        $url_count++;
+    }
+
+    # --- Other stats ---
+    my @gotkick_sorted = sort { ($stats->{gotkicked}{$b} || 0) <=> ($stats->{gotkicked}{$a} || 0) } keys %{ $stats->{gotkicked} || {} };
+    my @kicked_sorted = sort { ($stats->{kicked}{$b} || 0) <=> ($stats->{kicked}{$a} || 0) } keys %{ $stats->{kicked} || {} };
+    my @ops_sorted = sort { ($stats->{gaveops}{$b} || 0) <=> ($stats->{gaveops}{$a} || 0) } keys %{ $stats->{gaveops} || {} };
+    my @deops_sorted = sort { ($stats->{tookops}{$b} || 0) <=> ($stats->{tookops}{$a} || 0) } keys %{ $stats->{tookops} || {} };
+    my @actions_sorted = sort { ($stats->{actions}{$b} || 0) <=> ($stats->{actions}{$a} || 0) } keys %{ $stats->{actions} || {} };
+    my @mono_sorted = sort { ($stats->{monologues}{$b} || 0) <=> ($stats->{monologues}{$a} || 0) } keys %{ $stats->{monologues} || {} };
+    my @joins_sorted = sort { ($stats->{joins}{$b} || 0) <=> ($stats->{joins}{$a} || 0) } keys %{ $stats->{joins} || {} };
+
+    # Foul language percentage
+    my %foulpct;
+    foreach my $nick (keys %{ $stats->{foul} }) {
+        next unless $stats->{words}{$nick} && $stats->{lines}{$nick} && $stats->{lines}{$nick} > 15;
+        $foulpct{$nick} = sprintf("%.1f", ($stats->{foul}{$nick} / $stats->{words}{$nick}) * 100);
+    }
+    my @foul_sorted = sort { $foulpct{$b} <=> $foulpct{$a} } keys %foulpct;
+
+    # --- Topics ---
+    my @topics_json;
+    my $topic_count = 0;
+    if ($stats->{topics}) {
+        my %seen;
+        for (my $i = scalar(@{$stats->{topics}}) - 1; $i >= 0; $i--) {
+            last if $topic_count >= ($cfg->{topichistory} || 3);
+            my $t = $stats->{topics}[$i];
+            my $topic_text = $t->{topic} || "";
+            next if $seen{$topic_text}++;
+            my $days_ago = $stats->{days} - ($t->{days} || 0);
+            my $hour = $t->{hour} || 0;
+            my $min = sprintf("%02d", $t->{min} || 0);
+            push @topics_json, {
+                text => $topic_text,
+                date => "$days_ago days ago at $hour:$min",
+                setBy => ($t->{nick} || "unknown"),
+            };
+            $topic_count++;
+        }
+    }
+    my $topic_set_count = $stats->{topics} ? scalar(@{$stats->{topics}}) : 0;
+
+    # --- Build JSON string (manual, no JSON module dependency) ---
+    my $json = "{\n";
+
+    # meta
+    $json .= '  "meta": {';
+    $json .= '"channel":' . _json_str($cfg->{channel}) . ',';
+    $json .= '"network":' . _json_str($cfg->{network}) . ',';
+    $json .= '"days":' . $days . ',';
+    $json .= '"totalNicks":' . $total_nicks . ',';
+    $json .= '"totalLines":' . $total_lines . ',';
+    $json .= '"generatedAt":' . _json_str($gen_time) . ',';
+    $json .= '"version":' . _json_str($cfg->{version}) . ',';
+    $json .= '"processTime":' . _json_str($process_time);
+    $json .= "},\n";
+
+    # hourly
+    $json .= '  "hourly": [' . join(',', @hourly) . "],\n";
+
+    # nicks
+    $json .= "  \"nicks\": [\n";
+    my @nick_strs;
+    for my $n (@nicks_json) {
+        my $s = '    {';
+        $s .= '"name":' . _json_str($n->{name}) . ',';
+        $s .= '"lines":' . $n->{lines} . ',';
+        $s .= '"periods":[' . join(',', @{$n->{periods}}) . '],';
+        $s .= '"lastSeen":' . _json_str($n->{lastSeen}) . ',';
+        $s .= '"quote":' . _json_str($n->{quote});
+        $s .= '}';
+        push @nick_strs, $s;
+    }
+    $json .= join(",\n", @nick_strs) . "\n  ],\n";
+
+    # almostMadeIt
+    $json .= "  \"almostMadeIt\": [\n";
+    my @almost_strs;
+    for my $a (@almost) {
+        push @almost_strs, '    {"name":' . _json_str($a->{name}) . ',"lines":' . $a->{lines} . '}';
+    }
+    $json .= join(",\n", @almost_strs) . "\n  ],\n";
+    $json .= '  "otherNicksCount": ' . $other_nicks . ",\n";
+
+    # bigNumbers
+    $json .= "  \"bigNumbers\": {\n";
+    $json .= '    "questions": {"winner":' . _json_str($q_sorted[0] || "") . ',"pct":' . ($qpct{$q_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($q_sorted[1] || "") . ',"runnerPct":' . ($qpct{$q_sorted[1] || ""} || 0) . "},\n";
+    $json .= '    "yelling": {"winner":' . _json_str($s_sorted[0] || "") . ',"pct":' . ($spct{$s_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($s_sorted[1] || "") . ',"runnerPct":' . ($spct{$s_sorted[1] || ""} || 0) . "},\n";
+    $json .= '    "caps": {"winner":' . _json_str($c_sorted[0] || "") . ',"pct":' . ($cpct{$c_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($c_sorted[1] || "") . ',"runnerPct":' . ($cpct{$c_sorted[1] || ""} || 0) . "},\n";
+    $json .= '    "violent": {"text":' . _json_str($violent_text) . "},\n";
+    $json .= '    "smileys": {"winner":' . _json_str($sm_sorted[0] || "") . ',"pct":' . ($smpct{$sm_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($sm_sorted[1] || "") . ',"runnerPct":' . ($smpct{$sm_sorted[1] || ""} || 0) . "},\n";
+    $json .= '    "sad": {"winner":' . _json_str($sd_sorted[0] || "") . ',"pct":' . ($sdpct{$sd_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($sd_sorted[1] || "") . ',"runnerPct":' . ($sdpct{$sd_sorted[1] || ""} || 0) . "},\n";
+
+    my $longest_nick = $len_sorted[0] || "";
+    my $shortest_nick = $len_sorted[$#len_sorted] || "";
+    my $shortest_runner = (@len_sorted > 1) ? $len_sorted[$#len_sorted - 1] : "";
+    $json .= '    "lineLengths": {"longest":' . _json_str($longest_nick) . ',"longestAvg":' . ($avglen{$longest_nick} || 0) . ',"shortest":' . _json_str($shortest_nick) . ',"shortestAvg":' . ($avglen{$shortest_nick} || 0) . ',"shortestRunner":' . _json_str($shortest_runner) . ',"shortestRunnerAvg":' . ($avglen{$shortest_runner} || 0) . ',"channelAvg":' . $channel_avg_len . "},\n";
+    $json .= '    "totalWords": {"winner":' . _json_str($words_sorted[0] || "") . ',"count":' . ($stats->{words}{$words_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($words_sorted[1] || "") . ',"runnerCount":' . ($stats->{words}{$words_sorted[1] || ""} || 0) . "},\n";
+    $json .= '    "wpl": {"winner":' . _json_str($wpl_sorted[0] || "") . ',"avg":' . ($wpl{$wpl_sorted[0] || ""} || 0) . ',"channelAvg":' . $channel_avg_wpl . "}\n";
+    $json .= "  },\n";
+
+    # words
+    $json .= "  \"words\": [\n";
+    my @word_strs;
+    for my $w (@top_words) {
+        push @word_strs, '    {"word":' . _json_str($w->{word}) . ',"count":' . $w->{count} . ',"lastUsedBy":' . _json_str($w->{lastUsedBy}) . '}';
+    }
+    $json .= join(",\n", @word_strs) . "\n  ],\n";
+
+    # referencedNicks
+    $json .= "  \"referencedNicks\": [\n";
+    my @ref_strs;
+    for my $r (@ref_nicks) {
+        push @ref_strs, '    {"nick":' . _json_str($r->{nick}) . ',"count":' . $r->{count} . ',"lastUsedBy":' . _json_str($r->{lastUsedBy}) . '}';
+    }
+    $json .= join(",\n", @ref_strs) . "\n  ],\n";
+
+    # urls
+    $json .= "  \"urls\": [\n";
+    my @url_strs;
+    for my $u (@urls) {
+        push @url_strs, '    {"url":' . _json_str($u->{url}) . ',"count":' . $u->{count} . ',"lastUsedBy":' . _json_str($u->{lastUsedBy}) . '}';
+    }
+    $json .= join(",\n", @url_strs) . "\n  ],\n";
+
+    # otherStats
+    $json .= "  \"otherStats\": {\n";
+    $json .= '    "kicked": {"winner":' . _json_str($gotkick_sorted[0] || "") . ',"count":' . ($stats->{gotkicked}{$gotkick_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($gotkick_sorted[1] || "") . ',"runnerCount":' . ($stats->{gotkicked}{$gotkick_sorted[1] || ""} || 0) . "},\n";
+    $json .= '    "kicker": {"winner":' . _json_str($kicked_sorted[0] || "") . ',"count":' . ($stats->{kicked}{$kicked_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($kicked_sorted[1] || "") . ',"runnerCount":' . ($stats->{kicked}{$kicked_sorted[1] || ""} || 0) . "},\n";
+    $json .= '    "ops": {"winner":' . _json_str($ops_sorted[0] || "") . ',"count":' . ($stats->{gaveops}{$ops_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($ops_sorted[1] || "") . ',"runnerCount":' . ($stats->{gaveops}{$ops_sorted[1] || ""} || 0) . "},\n";
+    $json .= '    "deops": {"winner":' . _json_str($deops_sorted[0] || "") . ',"count":' . ($stats->{tookops}{$deops_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($deops_sorted[1] || "") . ',"runnerCount":' . ($stats->{tookops}{$deops_sorted[1] || ""} || 0) . "},\n";
+    $json .= '    "actions": {"winner":' . _json_str($actions_sorted[0] || "") . ',"count":' . ($stats->{actions}{$actions_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($actions_sorted[1] || "") . ',"runnerCount":' . ($stats->{actions}{$actions_sorted[1] || ""} || 0) . "},\n";
+    $json .= '    "monologues": {"winner":' . _json_str($mono_sorted[0] || "") . ',"count":' . ($stats->{monologues}{$mono_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($mono_sorted[1] || "") . ',"runnerCount":' . ($stats->{monologues}{$mono_sorted[1] || ""} || 0) . "},\n";
+    $json .= '    "joins": {"winner":' . _json_str($joins_sorted[0] || "") . ',"count":' . ($stats->{joins}{$joins_sorted[0] || ""} || 0) . "},\n";
+    $json .= '    "foul": {"winner":' . _json_str($foul_sorted[0] || "") . ',"pct":' . ($foulpct{$foul_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($foul_sorted[1] || "") . ',"runnerPct":' . ($foulpct{$foul_sorted[1] || ""} || 0) . "}\n";
+    $json .= "  },\n";
+
+    # topics
+    $json .= "  \"topics\": [\n";
+    my @topic_strs;
+    for my $t (@topics_json) {
+        push @topic_strs, '    {"text":' . _json_str($t->{text}) . ',"date":' . _json_str($t->{date}) . ',"setBy":' . _json_str($t->{setBy}) . '}';
+    }
+    $json .= join(",\n", @topic_strs) . "\n  ],\n";
+    $json .= '  "topicSetCount": ' . $topic_set_count . "\n";
+
+    $json .= "}";
+
+    return $json;
+}
+
+sub _json_str
+{
+    my $s = shift;
+    $s = "" unless defined $s;
+    $s =~ s/\\/\\\\/g;
+    $s =~ s/"/\\"/g;
+    $s =~ s/\n/\\n/g;
+    $s =~ s/\r/\\r/g;
+    $s =~ s/\t/\\t/g;
+    # Escape control characters
+    $s =~ s/([\x00-\x1f])/sprintf("\\u%04x", ord($1))/ge;
+    return "\"$s\"";
 }
 
 1;

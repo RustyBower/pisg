@@ -215,6 +215,8 @@ sub get_default_config_settings
         botnicks => '',            # Needed for DCpp format (non-irc)
         bridgenicks => '',
 
+        moderntheme => 0,          # Use modern dark-themed Chart.js output
+
         statsdump => '',           # Debug option
         modules_dir => '',         # set in get_cmdline_options
         cchannels => '',           # set in get_cmdline_options

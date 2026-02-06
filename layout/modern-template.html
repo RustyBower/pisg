@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Channel Stats</title>
+<style>
+:root {
+  --bg-page: #0d1117;
+  --bg-card: #161b22;
+  --bg-elevated: #1c2128;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --border: #30363d;
+  --accent-blue: #58a6ff;
+  --accent-purple: #bc8cff;
+  --accent-green: #3fb950;
+  --accent-red: #f85149;
+  --accent-amber: #f59e0b;
+  --accent-pink: #f778ba;
+  --accent-cyan: #06b6d4;
+  --period-night: #bc8cff;
+  --period-morning: #06b6d4;
+  --period-afternoon: #f59e0b;
+  --period-evening: #f85149;
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg-page);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent-blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Nav */
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(13,17,23,.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 1rem;
+}
+.nav-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; align-items: center; gap: 1.5rem;
+  height: 56px; overflow-x: auto;
+}
+.nav-brand { font-weight: 700; color: var(--text-primary); white-space: nowrap; font-size: .95rem; }
+.nav-links { display: flex; gap: .25rem; list-style: none; }
+.nav-links a {
+  padding: .35rem .65rem; border-radius: 6px; font-size: .8rem;
+  color: var(--text-secondary); white-space: nowrap; transition: background .15s, color .15s;
+}
+.nav-links a:hover, .nav-links a.active { background: var(--bg-elevated); color: var(--text-primary); text-decoration: none; }
+
+/* Main layout */
+main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+section { margin-bottom: 2.5rem; }
+.section-title {
+  font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem;
+  padding-bottom: .5rem; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: .5rem;
+}
+.section-title .icon { font-size: 1.1rem; }
+
+/* Cards */
+.card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 1.25rem;
+}
+.card-grid { display: grid; gap: 1rem; }
+.card-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.card-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.card-grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* Hero */
+.hero { text-align: center; padding: 2.5rem 0 1rem; }
+.hero h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: .25rem; }
+.hero .tagline { color: var(--text-secondary); font-size: 1rem; margin-bottom: 1.5rem; }
+.stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+.stat-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 1.25rem; text-align: center;
+}
+.stat-card .label { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); margin-bottom: .25rem; }
+.stat-card .value { font-size: 1.75rem; font-weight: 800; }
+.stat-card .sub { font-size: .75rem; color: var(--text-secondary); margin-top: .15rem; }
+.stat-card:nth-child(1) .value { color: var(--accent-blue); }
+.stat-card:nth-child(2) .value { color: var(--accent-purple); }
+.stat-card:nth-child(3) .value { color: var(--accent-green); }
+.stat-card:nth-child(4) .value { color: var(--accent-amber); }
+
+/* Chart containers */
+.chart-wrap { position: relative; width: 100%; }
+.chart-wrap canvas { width: 100% !important; }
+
+/* Tables */
+.data-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.data-table th {
+  text-align: left; padding: .6rem .75rem; font-weight: 600; font-size: .75rem;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.data-table td { padding: .55rem .75rem; border-bottom: 1px solid var(--border); }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: var(--bg-elevated); }
+.rank { color: var(--text-secondary); font-weight: 600; min-width: 2rem; display: inline-block; }
+.rank-1 { color: var(--accent-amber); }
+.nick { font-weight: 600; }
+.quote { font-style: italic; color: var(--text-secondary); font-size: .8rem; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Time period bar (mini stacked bar in table) */
+.period-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; min-width: 120px; }
+.period-bar span { display: block; height: 100%; }
+
+/* Personality cards */
+.personality-card {
+  display: flex; flex-direction: column; gap: .5rem;
+}
+.personality-card .card-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); display: flex; align-items: center; gap: .35rem; }
+.personality-card .winner { font-size: 1rem; font-weight: 700; }
+.personality-card .winner-pct { font-size: 1.5rem; font-weight: 800; }
+.progress-bar { height: 6px; background: var(--bg-page); border-radius: 3px; overflow: hidden; }
+.progress-bar .fill { height: 100%; border-radius: 3px; }
+.personality-card .runner-up { font-size: .75rem; color: var(--text-secondary); }
+
+/* Insight cards */
+.insight-value { font-size: 1.35rem; font-weight: 800; margin: .25rem 0; }
+.insight-label { font-size: .75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+.insight-detail { font-size: .85rem; color: var(--text-secondary); margin-top: .25rem; }
+
+/* Fun facts grid */
+.fun-card { text-align: center; }
+.fun-card .fun-icon { font-size: 1.5rem; margin-bottom: .35rem; }
+.fun-card .fun-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); margin-bottom: .15rem; }
+.fun-card .fun-nick { font-weight: 700; font-size: .95rem; }
+.fun-card .fun-value { font-size: .8rem; color: var(--text-secondary); }
+
+/* Topic timeline */
+.topic-card { padding: 1rem 1.25rem; }
+.topic-text { font-style: italic; color: var(--text-primary); margin-bottom: .35rem; font-size: .9rem; word-break: break-word; }
+.topic-meta { font-size: .75rem; color: var(--text-secondary); }
+
+/* Almost made it chips */
+.chip-list { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+.chip {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 999px; padding: .2rem .65rem; font-size: .75rem; color: var(--text-secondary);
+}
+.chip b { color: var(--text-primary); font-weight: 600; }
+
+/* Collapsible */
+.collapsible-toggle {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text-secondary); padding: .35rem .75rem; font-size: .8rem;
+  cursor: pointer; margin-top: .75rem; transition: background .15s;
+}
+.collapsible-toggle:hover { background: var(--bg-elevated); }
+.collapsible-content { display: none; }
+.collapsible-content.open { display: block; }
+
+/* Legend */
+.legend { display: flex; gap: 1rem; justify-content: center; margin-top: .75rem; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: .35rem; font-size: .75rem; color: var(--text-secondary); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+/* Footer */
+.footer { text-align: center; padding: 2rem 0; color: var(--text-secondary); font-size: .8rem; border-top: 1px solid var(--border); }
+.footer a { color: var(--accent-blue); }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .stat-cards { grid-template-columns: repeat(2, 1fr); }
+  .card-grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .card-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .nav-links { display: none; }
+}
+@media (max-width: 600px) {
+  .stat-cards { grid-template-columns: 1fr; }
+  .card-grid-2 { grid-template-columns: 1fr; }
+  .card-grid-3 { grid-template-columns: 1fr; }
+  .card-grid-4 { grid-template-columns: 1fr; }
+  .hero h1 { font-size: 1.5rem; }
+  .data-table { font-size: .78rem; }
+  .quote { max-width: 150px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-inner">
+    <span class="nav-brand" id="navBrand">Stats</span>
+    <ul class="nav-links">
+      <li><a href="#hero">Overview</a></li>
+      <li><a href="#hourly">Activity</a></li>
+      <li><a href="#contributors">Contributors</a></li>
+      <li><a href="#personality">Personality</a></li>
+      <li><a href="#insights">Insights</a></li>
+      <li><a href="#words">Words</a></li>
+      <li><a href="#refnicks">Nicks</a></li>
+      <li><a href="#urls">URLs</a></li>
+      <li><a href="#funfacts">Fun Facts</a></li>
+      <li><a href="#topics">Topics</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main>
+
+<!-- Hero -->
+<section id="hero" class="hero">
+  <h1 id="heroTitle"></h1>
+  <p class="tagline" id="heroTagline"></p>
+  <div class="stat-cards" id="heroStats"></div>
+</section>
+
+<!-- Hourly Activity -->
+<section id="hourly">
+  <h2 class="section-title"><span class="icon">&#x1f4ca;</span> Hourly Activity</h2>
+  <div class="card">
+    <div class="chart-wrap"><canvas id="hourlyChart" height="260"></canvas></div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:var(--period-night)"></span> Night (0-5)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--period-morning)"></span> Morning (6-11)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--period-afternoon)"></span> Afternoon (12-17)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--period-evening)"></span> Evening (18-23)</span>
+    </div>
+  </div>
+</section>
+
+<!-- Top Contributors -->
+<section id="contributors">
+  <h2 class="section-title"><span class="icon">&#x1f3c6;</span> Top Contributors</h2>
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="chart-wrap"><canvas id="contribChart" height="300"></canvas></div>
+  </div>
+  <div class="card" style="overflow-x:auto;">
+    <table class="data-table" id="contribTable">
+      <thead><tr>
+        <th>#</th><th>Nick</th><th>Lines</th><th>Activity by Period</th><th>Last Seen</th><th>Random Quote</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <button class="collapsible-toggle" onclick="toggleAlmost()">Show &quot;Almost Made It&quot; nicks</button>
+    <div id="almostContent" class="collapsible-content">
+      <div class="chip-list" id="almostChips"></div>
+    </div>
+    <p style="font-size:.8rem;color:var(--text-secondary);margin-top:.5rem;" id="otherNicksNote"></p>
+  </div>
+</section>
+
+<!-- Personality Stats -->
+<section id="personality">
+  <h2 class="section-title"><span class="icon">&#x1f3ad;</span> Personality Stats</h2>
+  <div class="card-grid card-grid-3" id="personalityGrid"></div>
+  <div class="card" style="margin-top:1rem;">
+    <h3 style="font-size:.95rem;font-weight:600;margin-bottom:.75rem;">Personality Radar</h3>
+    <div class="chart-wrap" style="max-width:500px;margin:0 auto;"><canvas id="radarChart" height="350"></canvas></div>
+  </div>
+</section>
+
+<!-- Channel Insights -->
+<section id="insights">
+  <h2 class="section-title"><span class="icon">&#x1f4a1;</span> Channel Insights</h2>
+  <div class="card-grid card-grid-2" id="insightsGrid"></div>
+  <div class="card" style="margin-top:1rem;">
+    <h3 style="font-size:.95rem;font-weight:600;margin-bottom:.75rem;">Activity Distribution</h3>
+    <div class="chart-wrap" style="max-width:350px;margin:0 auto;"><canvas id="doughnutChart" height="350"></canvas></div>
+  </div>
+</section>
+
+<!-- Top Words -->
+<section id="words">
+  <h2 class="section-title"><span class="icon">&#x1f4ac;</span> Most Used Words</h2>
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="chart-wrap"><canvas id="wordsChart" height="280"></canvas></div>
+  </div>
+  <div class="card" style="overflow-x:auto;">
+    <table class="data-table" id="wordsTable">
+      <thead><tr><th>#</th><th>Word</th><th>Uses</th><th>Last Used By</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Most Referenced Nicks -->
+<section id="refnicks">
+  <h2 class="section-title"><span class="icon">&#x1f4e2;</span> Most Referenced Nicks</h2>
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="chart-wrap"><canvas id="refNicksChart" height="220"></canvas></div>
+  </div>
+  <div class="card" style="overflow-x:auto;">
+    <table class="data-table" id="refNicksTable">
+      <thead><tr><th>#</th><th>Nick</th><th>References</th><th>Last Used By</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Most Referenced URLs -->
+<section id="urls">
+  <h2 class="section-title"><span class="icon">&#x1f517;</span> Most Referenced URLs</h2>
+  <div class="card" style="overflow-x:auto;">
+    <table class="data-table" id="urlsTable">
+      <thead><tr><th>#</th><th>URL</th><th>Uses</th><th>Last Used By</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Fun Facts -->
+<section id="funfacts">
+  <h2 class="section-title"><span class="icon">&#x1f389;</span> Fun Facts &amp; Other Stats</h2>
+  <div class="card-grid card-grid-4" id="funGrid"></div>
+</section>
+
+<!-- Latest Topics -->
+<section id="topics">
+  <h2 class="section-title"><span class="icon">&#x1f4dd;</span> Latest Topics</h2>
+  <div id="topicsList" style="display:flex;flex-direction:column;gap:.75rem;"></div>
+</section>
+
+</main>
+
+<!-- Footer -->
+<footer class="footer" id="pageFooter"></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+// ─── Channel Data (injected by pisg) ────────────────────────
+const CHANNEL_DATA = __CHANNEL_DATA__;
+
+// ─── Chart.js Global Defaults ───────────────────────────────
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#30363d';
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
+
+const PERIOD_COLORS = ['#bc8cff','#06b6d4','#f59e0b','#f85149'];
+const PERIOD_LABELS = ['Night (0-5)','Morning (6-11)','Afternoon (12-17)','Evening (18-23)'];
+
+// ─── Utility ────────────────────────────────────────────────
+function fmtNum(n) { return n.toLocaleString(); }
+function pctOf(v, total) { return ((v / total) * 100).toFixed(1); }
+function getDomain(url) { try { return new URL(url).hostname; } catch(e) { return url; } }
+function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ─── Page Chrome (title, hero, nav, footer) ─────────────────
+function buildPageChrome() {
+  var m = CHANNEL_DATA.meta;
+  document.title = m.channel + ' @ ' + m.network + ' \u2014 Channel Stats';
+  document.getElementById('navBrand').textContent = m.channel + ' Stats';
+  document.getElementById('heroTitle').innerHTML = escHtml(m.channel) + ' <span style="color:var(--text-secondary);font-weight:400;">@ ' + escHtml(m.network) + '</span>';
+  document.getElementById('heroTagline').innerHTML = 'Channel statistics &mdash; generated ' + escHtml(m.generatedAt);
+  var linesPerDay = m.days > 0 ? Math.round(m.totalLines / m.days) : 0;
+  var years = (m.days / 365.25).toFixed(1);
+  var stats = [
+    { label:'Channel Age', value: m.days, sub:'days (~' + years + ' years)' },
+    { label:'Unique Nicks', value: m.totalNicks, sub:'different users' },
+    { label:'Total Lines', value: m.totalLines, sub:'messages sent' },
+    { label:'Lines / Day', value: linesPerDay, sub:'average activity' }
+  ];
+  var html = '';
+  stats.forEach(function(s) {
+    html += '<div class="stat-card"><div class="label">' + s.label + '</div><div class="value" data-count="' + s.value + '">0</div><div class="sub">' + s.sub + '</div></div>';
+  });
+  document.getElementById('heroStats').innerHTML = html;
+  var footer = '<p>Stats generated by <a href="https://pisg.github.io/">pisg</a> v' + escHtml(m.version || '0.80') + ' in ' + escHtml(m.processTime || '') + '</p>';
+  footer += '<p>Total lines parsed: ' + fmtNum(m.totalLines) + '</p>';
+  document.getElementById('pageFooter').innerHTML = footer;
+}
+
+// ─── Animated Counters ──────────────────────────────────────
+function animateCounters() {
+  document.querySelectorAll('.stat-card .value[data-count]').forEach(function(el) {
+    var target = parseInt(el.dataset.count);
+    var duration = 1200;
+    var start = performance.now();
+    function tick(now) {
+      var t = Math.min((now - start) / duration, 1);
+      var ease = 1 - Math.pow(1 - t, 3);
+      el.textContent = fmtNum(Math.round(target * ease));
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+// ─── 1. Hourly Activity Chart ───────────────────────────────
+function buildHourlyChart() {
+  var d = CHANNEL_DATA.hourly;
+  var peak = Math.max.apply(null, d);
+  var colors = d.map(function(_, i) { return PERIOD_COLORS[Math.floor(i / 6)]; });
+  new Chart(document.getElementById('hourlyChart'), {
+    type: 'bar',
+    data: {
+      labels: Array.from({length:24}, function(_,i) { return i.toString().padStart(2,'0') + ':00'; }),
+      datasets: [{
+        data: d,
+        backgroundColor: colors.map(function(c) { return c + 'cc'; }),
+        borderColor: colors,
+        borderWidth: 1,
+        borderRadius: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) { return fmtNum(ctx.raw) + ' lines (' + pctOf(ctx.raw, CHANNEL_DATA.meta.totalLines) + '%)'; },
+            afterLabel: function(ctx) { return ctx.raw === peak ? '  \u2b50 Peak hour!' : ''; }
+          }
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, grid: { color: '#30363d44' }, ticks: { callback: function(v) { return fmtNum(v); } } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ─── 2. Top Contributors Stacked Bar ────────────────────────
+function buildContribChart() {
+  var top10 = CHANNEL_DATA.nicks.slice(0, 10);
+  var datasets = PERIOD_LABELS.map(function(label, i) {
+    return {
+      label: label,
+      data: top10.map(function(n) { return n.periods[i]; }),
+      backgroundColor: PERIOD_COLORS[i] + 'cc',
+      borderColor: PERIOD_COLORS[i],
+      borderWidth: 1,
+      borderRadius: 2
+    };
+  });
+  new Chart(document.getElementById('contribChart'), {
+    type: 'bar',
+    data: { labels: top10.map(function(n) { return n.name; }), datasets: datasets },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          callbacks: { label: function(ctx) { return ctx.dataset.label + ': ' + fmtNum(ctx.raw) + ' lines'; } }
+        }
+      },
+      scales: {
+        x: { stacked: true, grid: { color: '#30363d44' }, ticks: { callback: function(v) { return fmtNum(v); } } },
+        y: { stacked: true, grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ─── 3. Doughnut: Time-of-Day Distribution ──────────────────
+function buildDoughnutChart() {
+  var totals = [0,0,0,0];
+  CHANNEL_DATA.hourly.forEach(function(v,i) { totals[Math.floor(i/6)] += v; });
+  new Chart(document.getElementById('doughnutChart'), {
+    type: 'doughnut',
+    data: {
+      labels: PERIOD_LABELS,
+      datasets: [{
+        data: totals,
+        backgroundColor: PERIOD_COLORS.map(function(c) { return c + 'cc'; }),
+        borderColor: '#161b22',
+        borderWidth: 3
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(ctx) { return ctx.label + ': ' + fmtNum(ctx.raw) + ' (' + pctOf(ctx.raw, CHANNEL_DATA.meta.totalLines) + '%)'; }
+          }
+        }
+      }
+    }
+  });
+}
+
+// ─── 4. Top Words Bar ───────────────────────────────────────
+function buildWordsChart() {
+  var w = CHANNEL_DATA.words;
+  new Chart(document.getElementById('wordsChart'), {
+    type: 'bar',
+    data: {
+      labels: w.map(function(x) { return x.word; }),
+      datasets: [{ data: w.map(function(x) { return x.count; }), backgroundColor: '#58a6ffcc', borderColor: '#58a6ff', borderWidth: 1, borderRadius: 3 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return fmtNum(ctx.raw) + ' uses'; } } } },
+      scales: {
+        x: { grid: { color: '#30363d44' }, ticks: { callback: function(v) { return fmtNum(v); } } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ─── 5. Referenced Nicks Bar ────────────────────────────────
+function buildRefNicksChart() {
+  var r = CHANNEL_DATA.referencedNicks;
+  new Chart(document.getElementById('refNicksChart'), {
+    type: 'bar',
+    data: {
+      labels: r.map(function(x) { return x.nick; }),
+      datasets: [{ data: r.map(function(x) { return x.count; }), backgroundColor: '#bc8cffcc', borderColor: '#bc8cff', borderWidth: 1, borderRadius: 3 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return fmtNum(ctx.raw) + ' references'; } } } },
+      scales: {
+        x: { grid: { color: '#30363d44' }, ticks: { callback: function(v) { return fmtNum(v); } } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ─── 6. Personality Radar ───────────────────────────────────
+function buildRadarChart() {
+  var bn = CHANNEL_DATA.bigNumbers;
+  var labels = ['Questions %', 'Yelling %', 'CAPS %', 'Smileys %', 'Sad %', 'Foul %'];
+  var datasets = [
+    { label: bn.questions.winner, data: [bn.questions.pct, 0, 0, 0, 0, 0], borderColor: '#58a6ff', backgroundColor: '#58a6ff33', pointBackgroundColor: '#58a6ff' },
+    { label: bn.yelling.winner, data: [0, bn.yelling.pct, 0, 0, 0, 0], borderColor: '#f85149', backgroundColor: '#f8514933', pointBackgroundColor: '#f85149' },
+    { label: bn.smileys.winner, data: [0, 0, 0, bn.smileys.pct, 0, 0], borderColor: '#3fb950', backgroundColor: '#3fb95033', pointBackgroundColor: '#3fb950' }
+  ];
+  new Chart(document.getElementById('radarChart'), {
+    type: 'radar',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        r: { beginAtZero: true, grid: { color: '#30363d66' }, angleLines: { color: '#30363d66' }, pointLabels: { font: { size: 11 } } }
+      },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15 } } }
+    }
+  });
+}
+
+// ─── Build Tables ───────────────────────────────────────────
+function buildContribTable() {
+  var tbody = document.querySelector('#contribTable tbody');
+  var html = '';
+  CHANNEL_DATA.nicks.forEach(function(n, i) {
+    var total = n.periods.reduce(function(a,b) { return a+b; }, 0) || 1;
+    var barHtml = n.periods.map(function(p, pi) {
+      return '<span style="width:' + (p/total*100).toFixed(1) + '%;background:' + PERIOD_COLORS[pi] + '"></span>';
+    }).join('');
+    var rankClass = i === 0 ? 'rank rank-1' : 'rank';
+    html += '<tr><td><span class="' + rankClass + '">' + (i+1) + '</span></td>';
+    html += '<td class="nick">' + escHtml(n.name) + '</td>';
+    html += '<td>' + fmtNum(n.lines) + '</td>';
+    html += '<td><div class="period-bar">' + barHtml + '</div></td>';
+    html += '<td>' + escHtml(n.lastSeen) + '</td>';
+    html += '<td class="quote">&ldquo;' + escHtml(n.quote) + '&rdquo;</td></tr>';
+  });
+  tbody.innerHTML = html;
+  var chips = document.getElementById('almostChips');
+  var chipHtml = '';
+  CHANNEL_DATA.almostMadeIt.forEach(function(n) {
+    chipHtml += '<span class="chip"><b>' + escHtml(n.name) + '</b> (' + fmtNum(n.lines) + ')</span>';
+  });
+  chips.innerHTML = chipHtml;
+  document.getElementById('otherNicksNote').textContent = 'Plus ' + fmtNum(CHANNEL_DATA.otherNicksCount) + ' other nicks.';
+}
+
+function buildWordsTable() {
+  var tbody = document.querySelector('#wordsTable tbody');
+  var html = '';
+  CHANNEL_DATA.words.forEach(function(w, i) {
+    var rankClass = i === 0 ? 'rank rank-1' : 'rank';
+    html += '<tr><td><span class="' + rankClass + '">' + (i+1) + '</span></td><td class="nick">' + escHtml(w.word) + '</td><td>' + fmtNum(w.count) + '</td><td>' + escHtml(w.lastUsedBy) + '</td></tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function buildRefNicksTable() {
+  var tbody = document.querySelector('#refNicksTable tbody');
+  var html = '';
+  CHANNEL_DATA.referencedNicks.forEach(function(r, i) {
+    var rankClass = i === 0 ? 'rank rank-1' : 'rank';
+    html += '<tr><td><span class="' + rankClass + '">' + (i+1) + '</span></td><td class="nick">' + escHtml(r.nick) + '</td><td>' + fmtNum(r.count) + '</td><td>' + escHtml(r.lastUsedBy) + '</td></tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function buildUrlsTable() {
+  var tbody = document.querySelector('#urlsTable tbody');
+  var html = '';
+  CHANNEL_DATA.urls.forEach(function(u, i) {
+    var rankClass = i === 0 ? 'rank rank-1' : 'rank';
+    var domain = getDomain(u.url);
+    html += '<tr><td><span class="' + rankClass + '">' + (i+1) + '</span></td><td><a href="' + escHtml(u.url) + '" target="_blank">' + escHtml(domain) + '</a></td><td>' + fmtNum(u.count) + '</td><td>' + escHtml(u.lastUsedBy) + '</td></tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+// ─── Personality Cards ──────────────────────────────────────
+function buildPersonalityCards() {
+  var bn = CHANNEL_DATA.bigNumbers;
+  var cards = [
+    { icon: '\u2753', label: 'Questions', winner: bn.questions.winner, pct: bn.questions.pct, color: 'var(--accent-blue)', runner: bn.questions.runnerUp, runnerPct: bn.questions.runnerPct },
+    { icon: '\u2757', label: 'Yelling', winner: bn.yelling.winner, pct: bn.yelling.pct, color: 'var(--accent-red)', runner: bn.yelling.runnerUp, runnerPct: bn.yelling.runnerPct },
+    { icon: '\ud83d\udd20', label: 'ALL CAPS', winner: bn.caps.winner, pct: bn.caps.pct, color: 'var(--accent-amber)', runner: bn.caps.runnerUp, runnerPct: bn.caps.runnerPct },
+    { icon: '\ud83d\ude04', label: 'Smileys', winner: bn.smileys.winner, pct: bn.smileys.pct, color: 'var(--accent-green)', runner: bn.smileys.runnerUp, runnerPct: bn.smileys.runnerPct },
+    { icon: '\ud83d\ude22', label: 'Sad Faces', winner: bn.sad.winner, pct: bn.sad.pct, color: 'var(--accent-purple)', runner: bn.sad.runnerUp, runnerPct: bn.sad.runnerPct },
+    { icon: '\u2764\ufe0f', label: 'Friendly', text: bn.violent.text, color: 'var(--accent-pink)' }
+  ];
+  var grid = document.getElementById('personalityGrid');
+  var html = '';
+  cards.forEach(function(c) {
+    if (c.text) {
+      html += '<div class="card personality-card"><div class="card-label"><span>' + c.icon + '</span> ' + c.label + '</div><div style="font-size:.9rem;color:var(--text-secondary)">' + escHtml(c.text) + '</div></div>';
+    } else {
+      html += '<div class="card personality-card"><div class="card-label"><span>' + c.icon + '</span> ' + c.label + '</div><div class="winner">' + escHtml(c.winner) + '</div><div class="winner-pct" style="color:' + c.color + '">' + c.pct + '%</div><div class="progress-bar"><div class="fill" style="width:' + Math.min(c.pct * 4, 100) + '%;background:' + c.color + '"></div></div><div class="runner-up">Runner-up: <b>' + escHtml(c.runner) + '</b> (' + c.runnerPct + '%)</div></div>';
+    }
+  });
+  grid.innerHTML = html;
+}
+
+// ─── Insights Cards ─────────────────────────────────────────
+function buildInsightsCards() {
+  var bn = CHANNEL_DATA.bigNumbers;
+  var totalWords = bn.totalWords.count;
+  var novels = Math.round(totalWords / 80000);
+  var grid = document.getElementById('insightsGrid');
+  var html = '';
+  html += '<div class="card"><div class="insight-label">Longest avg line</div><div class="insight-value" style="color:var(--accent-blue)">' + bn.lineLengths.longestAvg + ' chars</div><div class="insight-detail"><b>' + escHtml(bn.lineLengths.longest) + '</b> writes the longest lines</div><div class="insight-detail" style="margin-top:.35rem">Shortest: <b>' + escHtml(bn.lineLengths.shortest) + '</b> at ' + bn.lineLengths.shortestAvg + ' chars &middot; Channel avg: ' + bn.lineLengths.channelAvg + '</div></div>';
+  html += '<div class="card"><div class="insight-label">Most words per line</div><div class="insight-value" style="color:var(--accent-green)">' + bn.wpl.avg + ' wpl</div><div class="insight-detail"><b>' + escHtml(bn.wpl.winner) + '</b> is the wordiest</div><div class="insight-detail" style="margin-top:.35rem">Channel average: ' + bn.wpl.channelAvg + ' words per line</div></div>';
+  html += '<div class="card"><div class="insight-label">Most words spoken</div><div class="insight-value" style="color:var(--accent-purple)">' + fmtNum(totalWords) + '</div><div class="insight-detail"><b>' + escHtml(bn.totalWords.winner) + '</b> &mdash; that\'s ~' + novels + ' novels worth!</div><div class="insight-detail" style="margin-top:.35rem">Runner-up: <b>' + escHtml(bn.totalWords.runnerUp) + '</b> with ' + fmtNum(bn.totalWords.runnerCount) + ' words</div></div>';
+  html += '<div class="card"><div class="insight-label">Time-of-day distribution</div><div class="insight-detail" style="margin-top:.35rem">See the doughnut chart below for the full breakdown of when ' + escHtml(CHANNEL_DATA.meta.channel) + ' is most active.</div></div>';
+  grid.innerHTML = html;
+}
+
+// ─── Fun Facts ──────────────────────────────────────────────
+function buildFunFacts() {
+  var os = CHANNEL_DATA.otherStats;
+  var facts = [
+    { icon: '\ud83e\udd4a', label: 'Most Kicked', nick: os.kicked.winner, value: os.kicked.count + ' kicks received' },
+    { icon: '\ud83d\udc62', label: 'Kick Master', nick: os.kicker.winner, value: os.kicker.count + ' kicks given' },
+    { icon: '\u2b50', label: 'Most Ops Given', nick: os.ops.winner, value: os.ops.count + ' ops' },
+    { icon: '\ud83d\udeab', label: 'Most Deops', nick: os.deops.winner, value: os.deops.count + ' deops' },
+    { icon: '\ud83c\udfac', label: 'Most Actions', nick: os.actions.winner, value: os.actions.count + " /me's" },
+    { icon: '\ud83d\udde3\ufe0f', label: 'Monologues', nick: os.monologues.winner, value: fmtNum(os.monologues.count) + ' times' },
+    { icon: '\ud83d\udea6', label: 'Most Joins', nick: os.joins.winner, value: fmtNum(os.joins.count) + ' joins' },
+    { icon: '\ud83e\udd2c', label: 'Foul Language', nick: os.foul.winner, value: os.foul.pct + '% foul words' }
+  ];
+  var grid = document.getElementById('funGrid');
+  var html = '';
+  facts.forEach(function(f) {
+    html += '<div class="card fun-card"><div class="fun-icon">' + f.icon + '</div><div class="fun-label">' + f.label + '</div><div class="fun-nick">' + escHtml(f.nick) + '</div><div class="fun-value">' + f.value + '</div></div>';
+  });
+  grid.innerHTML = html;
+}
+
+// ─── Topics ─────────────────────────────────────────────────
+function buildTopics() {
+  var list = document.getElementById('topicsList');
+  var html = '';
+  CHANNEL_DATA.topics.forEach(function(t) {
+    html += '<div class="card topic-card"><div class="topic-text">' + escHtml(t.text) + '</div><div class="topic-meta">' + escHtml(t.date) + ' &mdash; set by <b>' + escHtml(t.setBy) + '</b></div></div>';
+  });
+  html += '<p style="text-align:center;font-size:.8rem;color:var(--text-secondary)">The topic was set ' + CHANNEL_DATA.topicSetCount + ' times.</p>';
+  list.innerHTML = html;
+}
+
+// ─── Toggle ─────────────────────────────────────────────────
+function toggleAlmost() {
+  var el = document.getElementById('almostContent');
+  el.classList.toggle('open');
+  var btn = el.previousElementSibling;
+  btn.textContent = el.classList.contains('open') ? 'Hide "Almost Made It" nicks' : 'Show "Almost Made It" nicks';
+}
+
+// ─── Scrollspy ──────────────────────────────────────────────
+function initScrollspy() {
+  var links = document.querySelectorAll('.nav-links a');
+  var sections = [];
+  links.forEach(function(a) { var s = document.querySelector(a.getAttribute('href')); if (s) sections.push(s); });
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        links.forEach(function(a) { a.classList.remove('active'); });
+        var target = document.querySelector('.nav-links a[href="#' + entry.target.id + '"]');
+        if (target) target.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-80px 0px -60% 0px', threshold: 0 });
+  sections.forEach(function(s) { observer.observe(s); });
+}
+
+// ─── Init ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  buildPageChrome();
+  animateCounters();
+  buildHourlyChart();
+  buildContribChart();
+  buildDoughnutChart();
+  buildWordsChart();
+  buildRefNicksChart();
+  buildRadarChart();
+  buildContribTable();
+  buildWordsTable();
+  buildRefNicksTable();
+  buildUrlsTable();
+  buildPersonalityCards();
+  buildInsightsCards();
+  buildFunFacts();
+  buildTopics();
+  initScrollspy();
+});
+</script>
+</body>
+</html>

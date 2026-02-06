@@ -261,10 +261,6 @@ section { margin-bottom: 2.5rem; }
 <section id="personality">
   <h2 class="section-title"><span class="icon">&#x1f3ad;</span> Personality Stats</h2>
   <div class="card-grid card-grid-3" id="personalityGrid"></div>
-  <div class="card" style="margin-top:1rem;">
-    <h3 style="font-size:.95rem;font-weight:600;margin-bottom:.75rem;">Personality Radar</h3>
-    <div class="chart-wrap" style="max-width:500px;margin:0 auto;"><canvas id="radarChart" height="350"></canvas></div>
-  </div>
 </section>
 
 <!-- Channel Insights -->
@@ -529,27 +525,6 @@ function buildRefNicksChart() {
   });
 }
 
-// ─── 6. Personality Radar ───────────────────────────────────
-function buildRadarChart() {
-  var bn = CHANNEL_DATA.bigNumbers;
-  var labels = ['Questions %', 'Yelling %', 'CAPS %', 'Smileys %', 'Sad %', 'Foul %'];
-  var datasets = [
-    { label: bn.questions.winner, data: [bn.questions.pct, 0, 0, 0, 0, 0], borderColor: '#58a6ff', backgroundColor: '#58a6ff33', pointBackgroundColor: '#58a6ff' },
-    { label: bn.yelling.winner, data: [0, bn.yelling.pct, 0, 0, 0, 0], borderColor: '#f85149', backgroundColor: '#f8514933', pointBackgroundColor: '#f85149' },
-    { label: bn.smileys.winner, data: [0, 0, 0, bn.smileys.pct, 0, 0], borderColor: '#3fb950', backgroundColor: '#3fb95033', pointBackgroundColor: '#3fb950' }
-  ];
-  new Chart(document.getElementById('radarChart'), {
-    type: 'radar',
-    data: { labels: labels, datasets: datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      scales: {
-        r: { beginAtZero: true, grid: { color: '#30363d66' }, angleLines: { color: '#30363d66' }, pointLabels: { font: { size: 11 } } }
-      },
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15 } } }
-    }
-  });
-}
 
 // ─── Build Tables ───────────────────────────────────────────
 function buildContribTable() {
@@ -618,12 +593,12 @@ function buildPersonalityCards() {
     { icon: '\ud83d\udd20', label: 'ALL CAPS', winner: bn.caps.winner, pct: bn.caps.pct, color: 'var(--accent-amber)', runner: bn.caps.runnerUp, runnerPct: bn.caps.runnerPct },
     { icon: '\ud83d\ude04', label: 'Smileys', winner: bn.smileys.winner, pct: bn.smileys.pct, color: 'var(--accent-green)', runner: bn.smileys.runnerUp, runnerPct: bn.smileys.runnerPct },
     { icon: '\ud83d\ude22', label: 'Sad Faces', winner: bn.sad.winner, pct: bn.sad.pct, color: 'var(--accent-purple)', runner: bn.sad.runnerUp, runnerPct: bn.sad.runnerPct },
-    { icon: '\ud83d\udca5', label: 'Violent', winner: bn.violent.winner, pct: bn.violent.pct, color: 'var(--accent-pink)', runner: bn.violent.runnerUp, runnerPct: bn.violent.runnerPct }
+    { icon: '\ud83d\udca5', label: 'Violent', winner: bn.violent.winner, pct: bn.violent.pct, color: 'var(--accent-pink)', runner: bn.violent.runnerUp, runnerPct: bn.violent.runnerPct, line: bn.violent.line }
   ];
   var grid = document.getElementById('personalityGrid');
   var html = '';
   cards.forEach(function(c) {
-    html += '<div class="card personality-card"><div class="card-label"><span>' + c.icon + '</span> ' + c.label + '</div><div class="winner">' + escHtml(c.winner) + '</div><div class="winner-pct" style="color:' + c.color + '">' + c.pct + '%</div><div class="progress-bar"><div class="fill" style="width:' + Math.min(c.pct, 100) + '%;background:' + c.color + '"></div></div><div class="runner-up">Runner-up: <b>' + escHtml(c.runner) + '</b> (' + c.runnerPct + '%)</div></div>';
+    html += '<div class="card personality-card"><div class="card-label"><span>' + c.icon + '</span> ' + c.label + '</div><div class="winner">' + escHtml(c.winner) + '</div><div class="winner-pct" style="color:' + c.color + '">' + c.pct + '%</div><div class="progress-bar"><div class="fill" style="width:' + Math.min(c.pct, 100) + '%;background:' + c.color + '"></div></div>' + (c.line ? '<div class="runner-up" style="font-style:italic">' + escHtml(c.line) + '</div>' : '') + '<div class="runner-up">Runner-up: <b>' + escHtml(c.runner) + '</b> (' + c.runnerPct + '%)</div></div>';
   });
   grid.innerHTML = html;
 }
@@ -708,7 +683,6 @@ document.addEventListener('DOMContentLoaded', function() {
   buildDoughnutChart();
   buildWordsChart();
   buildRefNicksChart();
-  buildRadarChart();
   buildContribTable();
   buildWordsTable();
   buildRefNicksTable();

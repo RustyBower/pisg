@@ -2839,7 +2839,11 @@ sub _emit_channel_json
     $json .= '    "questions": {"winner":' . _json_str($q_sorted[0] || "") . ',"pct":' . ($qpct{$q_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($q_sorted[1] || "") . ',"runnerPct":' . ($qpct{$q_sorted[1] || ""} || 0) . "},\n";
     $json .= '    "yelling": {"winner":' . _json_str($s_sorted[0] || "") . ',"pct":' . ($spct{$s_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($s_sorted[1] || "") . ',"runnerPct":' . ($spct{$s_sorted[1] || ""} || 0) . "},\n";
     $json .= '    "caps": {"winner":' . _json_str($c_sorted[0] || "") . ',"pct":' . ($cpct{$c_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($c_sorted[1] || "") . ',"runnerPct":' . ($cpct{$c_sorted[1] || ""} || 0) . "},\n";
-    $json .= '    "violent": {"winner":' . _json_str($v_sorted[0] || "") . ',"pct":' . ($vpct{$v_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($v_sorted[1] || "") . ',"runnerPct":' . ($vpct{$v_sorted[1] || ""} || 0) . "},\n";
+    my $violent_line = "";
+    if ($v_sorted[0] && $stats->{violencelines}{$v_sorted[0]}) {
+        $violent_line = $self->_format_line($stats->{violencelines}{$v_sorted[0]});
+    }
+    $json .= '    "violent": {"winner":' . _json_str($v_sorted[0] || "") . ',"pct":' . ($vpct{$v_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($v_sorted[1] || "") . ',"runnerPct":' . ($vpct{$v_sorted[1] || ""} || 0) . ',"line":' . _json_str($violent_line) . "},\n";
     $json .= '    "smileys": {"winner":' . _json_str($sm_sorted[0] || "") . ',"pct":' . ($smpct{$sm_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($sm_sorted[1] || "") . ',"runnerPct":' . ($smpct{$sm_sorted[1] || ""} || 0) . "},\n";
     $json .= '    "sad": {"winner":' . _json_str($sd_sorted[0] || "") . ',"pct":' . ($sdpct{$sd_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($sd_sorted[1] || "") . ',"runnerPct":' . ($sdpct{$sd_sorted[1] || ""} || 0) . "},\n";
 

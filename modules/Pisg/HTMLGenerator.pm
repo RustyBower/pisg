@@ -2657,12 +2657,14 @@ sub _emit_channel_json
     }
     my @sd_sorted = sort { $sdpct{$b} <=> $sdpct{$a} } keys %sdpct;
 
-    # Violence
-    my @aggressors = sort { ($stats->{violence}{$b} || 0) <=> ($stats->{violence}{$a} || 0) } keys %{ $stats->{violence} || {} };
-    my $violent_text = "Nobody beat anyone up. Everybody was friendly.";
-    if (@aggressors && $stats->{violence}{$aggressors[0]}) {
-        $violent_text = "$aggressors[0] attacked others $stats->{violence}{$aggressors[0]} times.";
+    # Violence (as percentage of actions, since violence only occurs via /me)
+    my %vpct;
+    foreach my $nick (keys %{ $stats->{violence} || {} }) {
+        next unless $stats->{lines}{$nick} && $stats->{lines}{$nick} > $threshold;
+        next unless $stats->{actions}{$nick} && $stats->{actions}{$nick} > 0;
+        $vpct{$nick} = sprintf("%.1f", ($stats->{violence}{$nick} / $stats->{actions}{$nick}) * 100);
     }
+    my @v_sorted = sort { $vpct{$b} <=> $vpct{$a} } keys %vpct;
 
     # Line lengths
     my %avglen;
@@ -2837,7 +2839,7 @@ sub _emit_channel_json
     $json .= '    "questions": {"winner":' . _json_str($q_sorted[0] || "") . ',"pct":' . ($qpct{$q_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($q_sorted[1] || "") . ',"runnerPct":' . ($qpct{$q_sorted[1] || ""} || 0) . "},\n";
     $json .= '    "yelling": {"winner":' . _json_str($s_sorted[0] || "") . ',"pct":' . ($spct{$s_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($s_sorted[1] || "") . ',"runnerPct":' . ($spct{$s_sorted[1] || ""} || 0) . "},\n";
     $json .= '    "caps": {"winner":' . _json_str($c_sorted[0] || "") . ',"pct":' . ($cpct{$c_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($c_sorted[1] || "") . ',"runnerPct":' . ($cpct{$c_sorted[1] || ""} || 0) . "},\n";
-    $json .= '    "violent": {"text":' . _json_str($violent_text) . "},\n";
+    $json .= '    "violent": {"winner":' . _json_str($v_sorted[0] || "") . ',"pct":' . ($vpct{$v_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($v_sorted[1] || "") . ',"runnerPct":' . ($vpct{$v_sorted[1] || ""} || 0) . "},\n";
     $json .= '    "smileys": {"winner":' . _json_str($sm_sorted[0] || "") . ',"pct":' . ($smpct{$sm_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($sm_sorted[1] || "") . ',"runnerPct":' . ($smpct{$sm_sorted[1] || ""} || 0) . "},\n";
     $json .= '    "sad": {"winner":' . _json_str($sd_sorted[0] || "") . ',"pct":' . ($sdpct{$sd_sorted[0] || ""} || 0) . ',"runnerUp":' . _json_str($sd_sorted[1] || "") . ',"runnerPct":' . ($sdpct{$sd_sorted[1] || ""} || 0) . "},\n";
 

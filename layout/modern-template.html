@@ -618,16 +618,12 @@ function buildPersonalityCards() {
     { icon: '\ud83d\udd20', label: 'ALL CAPS', winner: bn.caps.winner, pct: bn.caps.pct, color: 'var(--accent-amber)', runner: bn.caps.runnerUp, runnerPct: bn.caps.runnerPct },
     { icon: '\ud83d\ude04', label: 'Smileys', winner: bn.smileys.winner, pct: bn.smileys.pct, color: 'var(--accent-green)', runner: bn.smileys.runnerUp, runnerPct: bn.smileys.runnerPct },
     { icon: '\ud83d\ude22', label: 'Sad Faces', winner: bn.sad.winner, pct: bn.sad.pct, color: 'var(--accent-purple)', runner: bn.sad.runnerUp, runnerPct: bn.sad.runnerPct },
-    { icon: '\u2764\ufe0f', label: 'Friendly', text: bn.violent.text, color: 'var(--accent-pink)' }
+    { icon: '\ud83d\udca5', label: 'Violent', winner: bn.violent.winner, pct: bn.violent.pct, color: 'var(--accent-pink)', runner: bn.violent.runnerUp, runnerPct: bn.violent.runnerPct }
   ];
   var grid = document.getElementById('personalityGrid');
   var html = '';
   cards.forEach(function(c) {
-    if (c.text) {
-      html += '<div class="card personality-card"><div class="card-label"><span>' + c.icon + '</span> ' + c.label + '</div><div style="font-size:.9rem;color:var(--text-secondary)">' + escHtml(c.text) + '</div></div>';
-    } else {
-      html += '<div class="card personality-card"><div class="card-label"><span>' + c.icon + '</span> ' + c.label + '</div><div class="winner">' + escHtml(c.winner) + '</div><div class="winner-pct" style="color:' + c.color + '">' + c.pct + '%</div><div class="progress-bar"><div class="fill" style="width:' + Math.min(c.pct * 4, 100) + '%;background:' + c.color + '"></div></div><div class="runner-up">Runner-up: <b>' + escHtml(c.runner) + '</b> (' + c.runnerPct + '%)</div></div>';
-    }
+    html += '<div class="card personality-card"><div class="card-label"><span>' + c.icon + '</span> ' + c.label + '</div><div class="winner">' + escHtml(c.winner) + '</div><div class="winner-pct" style="color:' + c.color + '">' + c.pct + '%</div><div class="progress-bar"><div class="fill" style="width:' + Math.min(c.pct, 100) + '%;background:' + c.color + '"></div></div><div class="runner-up">Runner-up: <b>' + escHtml(c.runner) + '</b> (' + c.runnerPct + '%)</div></div>';
   });
   grid.innerHTML = html;
 }

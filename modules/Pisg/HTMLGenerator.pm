@@ -2778,6 +2778,8 @@ sub _emit_channel_json
             last if $topic_count >= ($cfg->{topichistory} || 3);
             my $t = $stats->{topics}[$i];
             my $topic_text = $t->{topic} || "";
+            $topic_text =~ s/^\s*\[\s*//;
+            $topic_text =~ s/\s*\]\s*$//;
             next if $seen{$topic_text}++;
             my $days_ago = $stats->{days} - ($t->{days} || 0);
             my $hour = $t->{hour} || 0;
@@ -2791,6 +2793,78 @@ sub _emit_channel_json
         }
     }
     my $topic_set_count = $stats->{topics} ? scalar(@{$stats->{topics}}) : 0;
+
+    # --- Karma ---
+    my %karma_total;
+    my %karma_up;
+    my %karma_down;
+    foreach my $thing (keys %{ $stats->{karma} || {} }) {
+        my $label = lc(is_nick($thing) || $thing);
+        foreach my $nick (keys %{ $stats->{karma}{$thing} }) {
+            my $delta = $stats->{karma}{$thing}{$nick} || 0;
+            $karma_total{$label} += $delta;
+            if ($delta > 0) {
+                push @{ $karma_up{$label} ||= [] }, $nick;
+            } elsif ($delta < 0) {
+                push @{ $karma_down{$label} ||= [] }, $nick;
+            }
+        }
+    }
+    my @karma_sorted = sort { $karma_total{$b} <=> $karma_total{$a} } keys %karma_total;
+    my $karma_limit = $cfg->{karmahistory} || 5;
+    my @karma_good;
+    foreach my $t (@karma_sorted) {
+        last if scalar(@karma_good) >= $karma_limit;
+        next unless $karma_total{$t} > 0;
+        push @karma_good, {
+            thing => $t,
+            score => $karma_total{$t},
+            up    => $karma_up{$t}   || [],
+            down  => $karma_down{$t} || [],
+        };
+    }
+    my @karma_bad;
+    foreach my $t (reverse @karma_sorted) {
+        last if scalar(@karma_bad) >= $karma_limit;
+        next unless $karma_total{$t} < 0;
+        push @karma_bad, {
+            thing => $t,
+            score => $karma_total{$t},
+            up    => $karma_up{$t}   || [],
+            down  => $karma_down{$t} || [],
+        };
+    }
+
+    # --- Smiley inventory ---
+    my @smiley_inv;
+    my @smiley_keys = sort { ($stats->{smileys}{$b} || 0) <=> ($stats->{smileys}{$a} || 0) } keys %{ $stats->{smileys} || {} };
+    my $smiley_limit = $cfg->{smileyhistory} || 10;
+    for my $smiley (@smiley_keys) {
+        last if scalar(@smiley_inv) >= $smiley_limit;
+        push @smiley_inv, {
+            smiley     => $smiley,
+            count      => $stats->{smileys}{$smiley},
+            lastUsedBy => ($stats->{smileynicks}{$smiley} || ""),
+        };
+    }
+
+    # --- Nick changers ---
+    my @nick_changers;
+    my @nc_sorted = sort {
+        scalar(keys %{ $stats->{nicks}{$b} || {} }) <=> scalar(keys %{ $stats->{nicks}{$a} || {} })
+    } keys %{ $stats->{nicks} || {} };
+    my $nc_limit = $cfg->{mostnickshistory} || 5;
+    for my $identity (@nc_sorted) {
+        next if is_ignored($identity);
+        my @names = values %{ $stats->{nicks}{$identity} || {} };
+        last if scalar(@names) <= 1;
+        last if scalar(@nick_changers) >= $nc_limit;
+        push @nick_changers, {
+            nick  => $identity,
+            count => scalar(@names),
+            nicks => [ @names ],
+        };
+    }
 
     # --- Build JSON string (manual, no JSON module dependency) ---
     my $json = "{\n";
@@ -2898,7 +2972,36 @@ sub _emit_channel_json
         push @topic_strs, '    {"text":' . _json_str($t->{text}) . ',"date":' . _json_str($t->{date}) . ',"setBy":' . _json_str($t->{setBy}) . '}';
     }
     $json .= join(",\n", @topic_strs) . "\n  ],\n";
-    $json .= '  "topicSetCount": ' . $topic_set_count . "\n";
+    $json .= '  "topicSetCount": ' . $topic_set_count . ",\n";
+
+    # karma
+    $json .= "  \"karma\": {\n";
+    my $karma_entry = sub {
+        my $k = shift;
+        my $up   = '[' . join(',', map { _json_str($_) } @{ $k->{up}   || [] }) . ']';
+        my $down = '[' . join(',', map { _json_str($_) } @{ $k->{down} || [] }) . ']';
+        return '      {"thing":' . _json_str($k->{thing}) . ',"score":' . $k->{score} . ',"up":' . $up . ',"down":' . $down . '}';
+    };
+    $json .= "    \"good\": [\n" . join(",\n", map { $karma_entry->($_) } @karma_good) . (scalar(@karma_good) ? "\n" : "") . "    ],\n";
+    $json .= "    \"bad\": [\n"  . join(",\n", map { $karma_entry->($_) } @karma_bad)  . (scalar(@karma_bad)  ? "\n" : "") . "    ]\n";
+    $json .= "  },\n";
+
+    # smileyInventory
+    $json .= "  \"smileyInventory\": [\n";
+    my @si_strs;
+    for my $s (@smiley_inv) {
+        push @si_strs, '    {"smiley":' . _json_str($s->{smiley}) . ',"count":' . $s->{count} . ',"lastUsedBy":' . _json_str($s->{lastUsedBy}) . '}';
+    }
+    $json .= join(",\n", @si_strs) . (scalar(@si_strs) ? "\n" : "") . "  ],\n";
+
+    # nickChangers
+    $json .= "  \"nickChangers\": [\n";
+    my @nc_strs;
+    for my $n (@nick_changers) {
+        my $nicks_json = '[' . join(',', map { _json_str($_) } @{ $n->{nicks} }) . ']';
+        push @nc_strs, '    {"nick":' . _json_str($n->{nick}) . ',"count":' . $n->{count} . ',"nicks":' . $nicks_json . '}';
+    }
+    $json .= join(",\n", @nc_strs) . (scalar(@nc_strs) ? "\n" : "") . "  ]\n";
 
     $json .= "}";
 

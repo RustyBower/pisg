@@ -2778,8 +2778,6 @@ sub _emit_channel_json
             last if $topic_count >= ($cfg->{topichistory} || 3);
             my $t = $stats->{topics}[$i];
             my $topic_text = $t->{topic} || "";
-            $topic_text =~ s/^\s*\[\s*//;
-            $topic_text =~ s/\s*\]\s*$//;
             next if $seen{$topic_text}++;
             my $days_ago = $stats->{days} - ($t->{days} || 0);
             my $hour = $t->{hour} || 0;
